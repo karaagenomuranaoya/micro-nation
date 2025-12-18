@@ -1,51 +1,72 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { createClient } from "@/lib/supabase/server";
+import { SettingsForm } from "./settings-form";
+import { TransactionForm } from "./transaction-form";
+import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
+  const supabase = await createClient();
 
-  // セッションを確認
-  const { data: { user } } = await supabase.auth.getUser()
+  // 1. ユーザー情報の取得
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  // ログインしていなければログイン画面へ
-  if (!user) {
-    redirect('/login')
-  }
-
-  // プロフィール（国名など）を取得
+  // 2. プロフィール（国家設定）の取得
   const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+    .from("profiles")
+    .select("country_name, ruler_title")
+    .eq("id", user.id)
+    .single();
+
+  // 3. 支出履歴（最新5件）の取得
+  const { data: transactions } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <header className="flex justify-between items-center mb-8 border-b pb-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {profile?.country_name || '未設定国'} 予算管理本部
-          </h1>
-          <p className="text-muted-foreground">
-            ようこそ、{profile?.ruler_title || '元首'} 閣下
-          </p>
-        </div>
-        
-        {/* ログアウトは今後のステップで実装しますが、ボタンだけ置いておきます */}
-        <Button variant="outline">設定</Button>
+    <div className="container mx-auto p-6 space-y-8">
+      <header className="flex flex-col gap-2 border-b pb-4">
+        <h1 className="text-3xl font-bold tracking-tight">
+          {profile?.country_name || "未設定国"}・中央官衙
+        </h1>
+        <p className="text-muted-foreground">
+          ようこそ、{profile?.ruler_title || "元首"}。今日の国庫状況です。
+        </p>
       </header>
 
-      <div className="grid gap-6">
-        <div className="p-12 border-2 border-dashed rounded-lg text-center bg-zinc-50/50">
-          <p className="text-lg text-muted-foreground font-medium">
-            国家予算、執行準備完了。
-          </p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Phase 2 で支出入力機能を実装します。
-          </p>
+      <div className="grid gap-8 md:grid-cols-2">
+        {/* 左側：入力エリア */}
+        <div className="space-y-8">
+          <TransactionForm />
+          <SettingsForm 
+            initialCountryName={profile?.country_name || ""} 
+            initialRulerTitle={profile?.ruler_title || ""} 
+          />
+        </div>
+
+        {/* 右側：履歴エリア */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">直近の予算執行記録</h2>
+          <div className="space-y-2">
+            {transactions?.length === 0 ? (
+              <p className="text-muted-foreground italic text-sm">記録された公文書はありません。</p>
+            ) : (
+              transactions?.map((t) => (
+                <div key={t.id} className="p-4 border rounded-lg bg-card shadow-sm flex justify-between items-start">
+                  <div>
+                    <p className="font-bold">{t.title}</p>
+                    <p className="text-xs text-muted-foreground">{t.category} | {new Date(t.created_at).toLocaleDateString()}</p>
+                    <p className="text-sm mt-2 text-blue-600 dark:text-blue-400 font-medium">「{t.ai_comment}」</p>
+                  </div>
+                  <p className="font-mono font-bold">¥{t.amount?.toLocaleString()}</p>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
